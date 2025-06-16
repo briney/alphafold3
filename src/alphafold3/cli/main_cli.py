@@ -11,13 +11,18 @@
 """Main CLI group for AlphaFold 3."""
 
 import click
+from alphafold3.dependencies.system_deps import check_hmmer_dependencies
 
 CONTEXT_SETTINGS = dict(help_option_names=['-h', '--help'])
 
 @click.group(context_settings=CONTEXT_SETTINGS)
 def alphafold3():
     """AlphaFold 3 command line tools."""
-    pass
+    try:
+        check_hmmer_dependencies()
+    except click.ClickException as e:
+        # click.echo(str(e), err=True) # This would print the message twice
+        raise e # Re-raise the exception to let Click handle the exit and message display
 
 if __name__ == '__main__':
     alphafold3()

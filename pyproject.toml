@@ -11,6 +11,7 @@ build-backend = "scikit_build_core.build"
 [project]
 name = "alphafold3"
 version = "3.0.1"
+description = "AlphaFold 3: Accurate structure prediction of biomolecular complexes by deep learning. Requires HMMER (see README.md for details)."
 requires-python = ">=3.10"
 readme = "README.md"
 license = {file = "LICENSE"}

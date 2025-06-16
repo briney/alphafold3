@@ -33,6 +33,23 @@ business days. You may only use AlphaFold 3 model parameters if received
 directly from Google. Use is subject to these
 [terms of use](https://github.com/google-deepmind/alphafold3/blob/main/WEIGHTS_TERMS_OF_USE.md).
 
+## System Dependencies
+
+AlphaFold 3 requires the HMMER suite (version 3.1b2 or later) to be installed and available in your system's PATH. Specifically, the following HMMER tools are needed:
+- `jackhmmer`
+- `nhmmer`
+- `hmmalign`
+- `hmmsearch`
+- `hmmbuild`
+
+You can download HMMER from the official website: [http://hmmer.org/download.html](http://hmmer.org/download.html)
+
+If you are using Conda, you can install HMMER using the following command:
+```bash
+conda install -c bioconda hmmer
+```
+Ensure that the directory containing these HMMER binaries is included in your system's `PATH` environment variable. The AlphaFold 3 CLI will check for these dependencies at runtime and provide an error message if they are not found.
+
 ## Installation and Running Your First Prediction
 
 See the [installation documentation](docs/installation.md).

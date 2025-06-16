@@ -29,6 +29,36 @@ The instructions provided below describe how to:
 1.  Obtain model parameters.
 1.  Build the AlphaFold 3 Docker container or Singularity image.
 
+## System Dependencies
+
+Before installing the AlphaFold 3 Python package, you must ensure that the HMMER suite (version 3.1b2 or later) is installed on your system and that its tools are accessible via your `PATH`. AlphaFold 3 relies on the following HMMER command-line tools:
+
+- `jackhmmer`
+- `nhmmer`
+- `hmmalign`
+- `hmmsearch`
+- `hmmbuild`
+
+**Installation Instructions for HMMER:**
+
+*   **Official Website:** You can download HMMER directly from [http://hmmer.org/download.html](http://hmmer.org/download.html). Follow their instructions for installation and make sure to add the installation directory to your system's `PATH`.
+*   **Using Conda:** If you use Conda, HMMER can be easily installed from the Bioconda channel:
+    ```bash
+    conda install -c bioconda hmmer
+    ```
+    This method usually handles PATH configuration within the Conda environment.
+
+        **Helper Script for Installation:**
+
+        We provide a helper script, `scripts/install_hmmer.sh`, which attempts to install HMMER on common Linux distributions (Debian/Ubuntu, CentOS/RHEL) and macOS (using Homebrew). You can run it as follows:
+
+        ```bash
+        bash scripts/install_hmmer.sh
+        ```
+        Please note that this script may require `sudo` privileges. If the script cannot automatically install HMMER on your system, it will provide instructions for manual installation.
+
+The AlphaFold 3 command-line interface will perform a check for these HMMER tools when you run it. If any are missing, it will display an error message with details.
+
 ## Provisioning a Machine
 
 Clean Ubuntu images are available on Google Cloud, AWS, Azure, and other major
