@@ -68,3 +68,4 @@ alphafold3 = "alphafold3.cli.main_cli:alphafold3"
 alphafold3-fetch-databases = "alphafold3.cli.fetch_databases:main"
 alphafold3-test = "alphafold3.cli.run_alphafold_test:main"
 build_data = "alphafold3.build_data:build_data"
+alphafold3-health-check = "alphafold3.cli.health_check:main_cli" # New line
