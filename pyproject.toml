@@ -11,30 +11,39 @@ build-backend = "scikit_build_core.build"
 [project]
 name = "alphafold3"
 version = "3.0.1"
-description = "AlphaFold 3: Accurate structure prediction of biomolecular complexes by deep learning. Requires HMMER (see README.md for details)."
+description = "AlphaFold 3: Predicting the structure and interactions of all life's molecules"
 requires-python = ">=3.10"
 readme = "README.md"
 license = {file = "LICENSE"}
+keywords = ["protein", "structure", "prediction", "machine-learning", "alphafold"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering :: Bio-Informatics",
+    "Programming Language :: Python :: 3.11",
+]
 dependencies = [
-    "absl-py",
+    "absl-py==2.1.0",
     "dm-haiku==0.0.13",
-    "dm-tree",
+    "dm-tree==0.1.8",
     "jax==0.4.34",
-    "jax[cuda12]==0.4.34",
     "jax-triton==0.2.0",
     "jaxtyping==0.2.34",
-    "numpy",
+    "numpy==2.1.3",
     "rdkit==2024.3.5",
     "triton==3.1.0",
-    "tqdm",
+    "tqdm==4.67.0",
     "typeguard==2.13.3",
-    "zstandard",
+    "zstandard==0.23.0",
     "click", # Added click as a dependency
     "requests", # Added requests as a dependency
 ]
 
 [project.optional-dependencies]
 test = ["pytest>=6.0"]
+dev = ["black", "isort", "flake8", "mypy"]
+gpu = ["jax[cuda12]==0.4.34"]
+cpu = ["jax[cpu]==0.4.34"]
 
 [tool.scikit-build]
 wheel.exclude = [
