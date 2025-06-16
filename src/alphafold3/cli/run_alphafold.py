@@ -15,7 +15,8 @@ import multiprocessing
 import pathlib
 import shutil
 
-from alphafold3.run_alphafold_logic import run_alphafold_entrypoint, _DEFAULT_MODEL_DIR, _DEFAULT_DB_DIR
+# from alphafold3.run_alphafold_logic import _DEFAULT_MODEL_DIR, _DEFAULT_DB_DIR # Or similar
+from alphafold3.run_alphafold_logic import run_alphafold_entrypoint
 from alphafold3.cli.main_cli import alphafold3 # Import the shared group
 
 # Remove the local cli group definition, it's now imported.
@@ -28,7 +29,10 @@ from alphafold3.cli.main_cli import alphafold3 # Import the shared group
 @click.option('--json-path', type=click.Path(exists=True, dir_okay=False), default=None, help='Path to the input JSON file.')
 @click.option('--input-dir', type=click.Path(exists=True, file_okay=False), default=None, help='Path to the directory containing input JSON files.')
 @click.option('--output-dir', type=click.Path(), required=True, help='Path to a directory where the results will be saved.')
-@click.option('--model-dir', type=click.Path(exists=True, file_okay=False), default=_DEFAULT_MODEL_DIR.as_posix(), show_default=True, help='Path to the model to use for inference.')
+@click.option('--model-dir',
+              type=click.Path(file_okay=False, resolve_path=True),
+              default=None,
+              help='Path to the model parameters directory. If not set, uses AF3_MODEL_DIR, config file, or default search locations.')
 @click.option('--run-data-pipeline/--no-run-data-pipeline', default=True, show_default=True, help='Whether to run the data pipeline on the fold inputs.')
 @click.option('--run-inference/--no-run-inference', default=True, show_default=True, help='Whether to run inference on the fold inputs.')
 @click.option('--jackhmmer-binary-path', type=click.Path(exists=True, dir_okay=False), default=shutil.which('jackhmmer'), show_default=True, help='Path to the Jackhmmer binary.')
@@ -36,7 +40,11 @@ from alphafold3.cli.main_cli import alphafold3 # Import the shared group
 @click.option('--hmmalign-binary-path', type=click.Path(exists=True, dir_okay=False), default=shutil.which('hmmalign'), show_default=True, help='Path to the Hmmalign binary.')
 @click.option('--hmmsearch-binary-path', type=click.Path(exists=True, dir_okay=False), default=shutil.which('hmmsearch'), show_default=True, help='Path to the Hmmsearch binary.')
 @click.option('--hmmbuild-binary-path', type=click.Path(exists=True, dir_okay=False), default=shutil.which('hmmbuild'), show_default=True, help='Path to the Hmmbuild binary.')
-@click.option('--db-dir', type=click.Path(exists=True, file_okay=False), multiple=True, default=[_DEFAULT_DB_DIR.as_posix()], show_default=True, help='Path to the directory containing the databases. Can be specified multiple times to search multiple directories in order.')
+@click.option('--db-dir',
+              type=click.Path(file_okay=False, resolve_path=True),
+              multiple=True,
+              default=None, # Default is now None (or empty tuple which click might convert to for multiple=True)
+              help='Path to a directory containing databases. Can be specified multiple times. If not set, uses AF3_DB_DIRS, config file, or default search locations.')
 @click.option('--small-bfd-database-path', type=str, default='${DB_DIR}/bfd-first_non_consensus_sequences.fasta', show_default=True, help='Small BFD database path, used for protein MSA search.')
 @click.option('--mgnify-database-path', type=str, default='${DB_DIR}/mgy_clusters_2022_05.fa', show_default=True, help='Mgnify database path, used for protein MSA search.')
 @click.option('--uniprot-cluster-annot-database-path', type=str, default='${DB_DIR}/uniprot_all_2021_04.fa', show_default=True, help='UniProt database path, used for protein paired MSA search.')
@@ -100,11 +108,12 @@ def predict_command(
     force_output_dir
 ):
     """Runs AlphaFold 3 structure prediction."""
+    processed_db_dir_param = list(db_dir) if db_dir else None
     run_alphafold_entrypoint(
         json_path=json_path,
         input_dir=input_dir,
         output_dir_param=output_dir, # Passed as output_dir_param
-        model_dir_param=model_dir,   # Passed as model_dir_param
+        model_dir_param=model_dir,   # Passed as model_dir_param (None if not provided)
         run_data_pipeline=run_data_pipeline,
         run_inference=run_inference,
         jackhmmer_binary_path=jackhmmer_binary_path,
@@ -112,7 +121,7 @@ def predict_command(
         hmmalign_binary_path=hmmalign_binary_path,
         hmmsearch_binary_path=hmmsearch_binary_path,
         hmmbuild_binary_path=hmmbuild_binary_path,
-        db_dir=list(db_dir), # Convert tuple to list for consistency if needed by logic
+        db_dir=processed_db_dir_param, # Pass the processed list or None
         small_bfd_database_path=small_bfd_database_path,
         mgnify_database_path=mgnify_database_path,
         uniprot_cluster_annot_database_path=uniprot_cluster_annot_database_path,

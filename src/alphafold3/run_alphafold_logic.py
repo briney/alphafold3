@@ -17,7 +17,8 @@ import datetime
 import functools
 import multiprocessing
 import os
-import pathlib
+from alphafold3.config.paths import get_model_dir, get_database_dirs, find_database_file
+import pathlib # Ensure pathlib is imported if not already
 import shutil
 import string
 import textwrap
@@ -43,9 +44,9 @@ import jax
 from jax import numpy as jnp
 import numpy as np
 
-_HOME_DIR = pathlib.Path(os.environ.get('HOME'))
-_DEFAULT_MODEL_DIR = _HOME_DIR / 'models'
-_DEFAULT_DB_DIR = _HOME_DIR / 'public_databases'
+# _HOME_DIR = pathlib.Path(os.environ.get('HOME')) # Or however it's defined
+# _DEFAULT_MODEL_DIR = _HOME_DIR / 'models'
+# _DEFAULT_DB_DIR = _HOME_DIR / 'public_databases'
 
 
 def make_model_config(
@@ -338,22 +339,6 @@ def write_outputs(
       writer.writerows(ranking_scores)
 
 
-def replace_db_dir(path_with_db_dir: str, db_dirs: Sequence[str]) -> str:
-  """Replaces the DB_DIR placeholder in a path with the given DB_DIR."""
-  template = string.Template(path_with_db_dir)
-  if 'DB_DIR' in template.get_identifiers():
-    for db_dir in db_dirs:
-      path = template.substitute(DB_DIR=db_dir)
-      if os.path.exists(path):
-        return path
-    raise FileNotFoundError(
-        f'{path_with_db_dir} with ${{DB_DIR}} not found in any of {db_dirs}.'
-    )
-  if not os.path.exists(path_with_db_dir):
-    raise FileNotFoundError(f'{path_with_db_dir} does not exist.')
-  return path_with_db_dir
-
-
 @overload
 def process_fold_input(
     fold_input_obj: folding_input.Input, # Renamed from fold_input to avoid clash
@@ -456,7 +441,7 @@ def run_alphafold_entrypoint(
     json_path: str | None = None,
     input_dir: str | None = None,
     output_dir_param: str = None, # Renamed to avoid clash with outer scope output_dir
-    model_dir_param: str = _DEFAULT_MODEL_DIR.as_posix(), # Renamed
+    model_dir_param: str = None, # New default
     run_data_pipeline: bool = True,
     run_inference: bool = True,
     jackhmmer_binary_path: str = shutil.which('jackhmmer'),
@@ -464,7 +449,7 @@ def run_alphafold_entrypoint(
     hmmalign_binary_path: str = shutil.which('hmmalign'),
     hmmsearch_binary_path: str = shutil.which('hmmsearch'),
     hmmbuild_binary_path: str = shutil.which('hmmbuild'),
-    db_dir: Sequence[str] = (_DEFAULT_DB_DIR.as_posix(),),
+    db_dir: Sequence[str] = None, # New default
     small_bfd_database_path: str = '${DB_DIR}/bfd-first_non_consensus_sequences.fasta',
     mgnify_database_path: str = '${DB_DIR}/mgy_clusters_2022_05.fa',
     uniprot_cluster_annot_database_path: str = '${DB_DIR}/uniprot_all_2021_04.fa',
@@ -490,6 +475,23 @@ def run_alphafold_entrypoint(
     save_distogram: bool = False,
     force_output_dir: bool = False,
 ):
+  # Resolve model_dir
+  try:
+      resolved_model_dir = get_model_dir(cli_model_dir=model_dir_param)
+      print(f"Using model directory: {resolved_model_dir}")
+  except FileNotFoundError as e:
+      print(f"Error: {e}")
+      raise SystemExit(1) # Or handle error appropriately
+
+  # Resolve db_dirs
+  # db_dir here is the parameter passed to run_alphafold_entrypoint, renamed from db_dir_param for clarity inside this function
+  try:
+      resolved_db_dirs = get_database_dirs(cli_db_dirs=db_dir)
+      print(f"Using database directories: {[str(d) for d in resolved_db_dirs]}")
+  except FileNotFoundError as e:
+      print(f"Error: {e}")
+      raise SystemExit(1) # Or handle error appropriately
+
   if jax_compilation_cache_dir is not None:
     jax.config.update(
         'jax_compilation_cache_dir', jax_compilation_cache_dir
@@ -569,7 +571,8 @@ def run_alphafold_entrypoint(
 
   _max_template_date_obj = datetime.date.fromisoformat(max_template_date)
   if run_data_pipeline:
-    expand_path = lambda x: replace_db_dir(x, db_dir)
+    # expand_path will use resolved_db_dirs
+    expand_path = lambda path_template: str(find_database_file(resolved_db_dirs, path_template))
     data_pipeline_config = pipeline.DataPipelineConfig(
         jackhmmer_binary_path=jackhmmer_binary_path,
         nhmmer_binary_path=nhmmer_binary_path,
@@ -613,7 +616,7 @@ def run_alphafold_entrypoint(
             return_distogram=save_distogram,
         ),
         device=devices[gpu_device],
-        model_dir=pathlib.Path(model_dir_param),
+        model_dir=resolved_model_dir, # Use the resolved Path object
     )
     # Check we can load the model parameters before launching anything.
     print('Checking that model parameters can be loaded...')

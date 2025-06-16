@@ -1,0 +1,7 @@
+{
+  "model_dir": "/path/to/your/alphafold3/models",
+  "database_dirs": [
+    "/path/to/your/alphafold3/databases/main",
+    "/path/to/your/other_alphafold3_databases"
+  ]
+}

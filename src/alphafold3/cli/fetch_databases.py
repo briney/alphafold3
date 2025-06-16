@@ -15,6 +15,8 @@ import os
 import pathlib
 import shutil
 import tarfile
+from typing import Optional
+from alphafold3.config.paths import get_database_dirs
 
 import click
 import requests
@@ -22,7 +24,7 @@ import zstandard
 
 from alphafold3.cli.main_cli import alphafold3 # Import the shared group
 
-_DEFAULT_DB_DIR_STR = '~/public_databases'
+# _DEFAULT_DB_DIR_STR = '~/public_databases'
 SOURCE_URL = "https://storage.googleapis.com/alphafold-databases/v3.0"
 
 DATABASE_FILES = [
@@ -120,62 +122,97 @@ def download_and_decompress_fa_zst(filename_fa: str, db_dir_path: pathlib.Path):
 @alphafold3.command(name='fetch-databases')
 @click.option(
     '--db-dir',
-    type=click.Path(),
-    default=_DEFAULT_DB_DIR_STR,
-    show_default=True,
-    help='Directory to download and store databases.'
+    "db_dir_override",  # Renames the argument in the function signature
+    type=click.Path(file_okay=False, resolve_path=True),
+    default=None,
+    show_default=False,
+    help='Specific directory to download/store databases. Overrides configured paths. '
+         'If not set, attempts to use paths from AF3_DB_DIRS, config file, or defaults like ~/.alphafold3/databases.'
 )
-def fetch_databases_main(db_dir: str):
+def fetch_databases_main(db_dir_override: Optional[str]):
     """Downloads and decompresses AlphaFold 3 databases."""
-    db_dir_path = pathlib.Path(db_dir).expanduser()
+    target_db_dir_path: Optional[pathlib.Path] = None
 
-    click.echo(f"Creating database directory: {db_dir_path}")
-    db_dir_path.mkdir(parents=True, exist_ok=True)
+    if db_dir_override:
+        # User provided a specific directory for this download operation
+        target_db_dir_path = pathlib.Path(db_dir_override).expanduser().resolve()
+        click.echo(f"Using specified download directory: {target_db_dir_path}")
+    else:
+        # No specific directory given, try to get from config system
+        try:
+            # We pass None to cli_db_dirs as we are not using CLI args for this internal lookup
+            configured_db_dirs = get_database_dirs(cli_db_dirs=None)
 
-    # Check for zstd, tar (tarfile is a Python module, so no CLI check needed for tar)
-    if not shutil.which("zstd"): # zstandard library is used, so this check might be redundant
-        click.echo("zstd command line tool not found. Please install zstandard if issues arise, though the Python library should suffice.", err=True)
-        # The script uses the zstandard library, so the CLI tool isn't strictly necessary.
-        # However, the original script checked for it.
+            # Try to find the first writable directory among configured paths
+            for d_path in configured_db_dirs:
+                # Check if path exists and is writable
+                if d_path.exists() and d_path.is_dir() and os.access(d_path, os.W_OK):
+                    target_db_dir_path = d_path
+                    click.echo(f"Using first writable configured database directory for download: {target_db_dir_path}")
+                    break
+                # If it doesn't exist, check if parent is writable to allow creation
+                elif not d_path.exists() and d_path.parent.exists() and os.access(d_path.parent, os.W_OK):
+                    target_db_dir_path = d_path
+                    click.echo(f"Using configured database directory (will be created): {target_db_dir_path}")
+                    break
 
-    # Use ThreadPoolExecutor for concurrent downloads
-    # Max workers can be adjusted; 5 seems reasonable for network-bound tasks.
+            if not target_db_dir_path and configured_db_dirs:
+                # If configured_db_dirs were found but none were suitable (e.g. all read-only mounts)
+                # Use the first configured path; mkdir will test writability.
+                target_db_dir_path = configured_db_dirs[0]
+                click.echo(f"Using first configured database directory (writability will be tested by mkdir): {target_db_dir_path}")
+
+        except FileNotFoundError:
+            # This exception from get_database_dirs means no paths were resolved.
+            # Will be handled by the final fallback.
+            pass
+
+        if not target_db_dir_path:
+            # Final fallback if no path found from override, config, or writable defaults
+            primary_download_default = pathlib.Path.home() / '.alphafold3' / 'databases'
+            target_db_dir_path = primary_download_default
+            click.echo(f"No suitable configured directory found or no configuration set. "
+                       f"Defaulting download to: {target_db_dir_path}")
+
+    if not target_db_dir_path: # Should be practically unreachable
+        click.echo("Critical Error: Could not determine a download directory.", err=True)
+        return
+
+    click.echo(f"Ensuring database directory exists and is writable: {target_db_dir_path}")
+    try:
+        target_db_dir_path.mkdir(parents=True, exist_ok=True)
+        # Test writability explicitly
+        test_file = target_db_dir_path / ".af3_writetest"
+        with open(test_file, "w") as f:
+            f.write("test")
+        os.remove(test_file)
+    except Exception as e:
+        click.echo(f"Error: Target database directory {target_db_dir_path} is not writable or cannot be created: {e}", err=True)
+        click.echo("Please check permissions or specify a writable directory using --db-dir.")
+        return
+
+    if not shutil.which("zstd"):
+        click.echo("Warning: zstd command line tool not found. The Python zstandard library will be used.", dim=True)
+
     with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
-        # Submit the tar.zst file processing
-        futures = [executor.submit(download_and_extract_tar_zst, db_dir_path, executor)]
-
-        # Submit .fa.zst files processing
+        futures_list = [executor.submit(download_and_extract_tar_zst, target_db_dir_path, executor)]
         for db_file in DATABASE_FILES:
-            futures.append(executor.submit(download_and_decompress_fa_zst, db_file, db_dir_path))
+            futures_list.append(executor.submit(download_and_decompress_fa_zst, db_file, target_db_dir_path))
 
-        for future in concurrent.futures.as_completed(futures):
-            # You can add error handling here if needed, though errors are printed in functions
+        completed_count = 0
+        total_tasks = len(futures_list)
+        for future_item in concurrent.futures.as_completed(futures_list):
             try:
-                future.result()
+                future_item.result()
+                completed_count +=1
+                click.echo(f"Completed {completed_count}/{total_tasks} download/extraction tasks.")
             except Exception as e:
-                click.echo(f"A task resulted in an error: {e}", err=True)
+                click.echo(f"A download/extraction task resulted in an error: {e}", err=True)
 
-    click.echo("Database fetch process completed.")
+        if completed_count == total_tasks:
+            click.echo(f"All {total_tasks} database fetch tasks completed successfully. Files are in {target_db_dir_path}.")
+        else:
+            click.echo(f"Database fetch process completed with {total_tasks - completed_count} error(s) out of {total_tasks} tasks. Check logs above.", err=True)
 
 if __name__ == '__main__':
-    alphafold3() # This allows running this script directly for the fetch-databases command via the group
-                 # Or, more typically, the user would run `alphafold3 fetch-databases ...`
-                 # if main_cli.py is the entry point.
-                 # For development, this is fine.
-                 # The actual entry point should be alphafold3.cli.main_cli:alphafold3
-                 # And then you'd call `python -m alphafold3.cli.main_cli fetch-databases --db-dir ...`
-                 # or after installation `alphafold3 fetch-databases --db-dir ...`
-    pass # Keep the if __name__ == '__main__': block, but alphafold3() will handle it.
-         # The main_cli.py would be the actual entry point for the `alphafold3` command.
-         # This file essentially just adds a command to that group.
-         # So, if this file is run directly, it should ideally invoke the main group.
-         # The `pass` is fine, or can call `alphafold3()` like in `run_alphafold.py`.
-         # Let's make it consistent:
-    # alphafold3() # Assuming main_cli.py will be the entry point.
-    # Actually, if this script is run directly, it doesn't know about other commands unless main_cli is run.
-    # This is more about structure. The `alphafold3()` call makes sense if this is the *only* way to access this command.
-    # But since we are building a group, let's remove it to avoid confusion.
-    # The commands will be available via the main_cli entry point.
     pass
-
-main = fetch_databases_main
