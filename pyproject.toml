@@ -11,7 +11,7 @@ build-backend = "scikit_build_core.build"
 [project]
 name = "alphafold3"
 version = "3.0.1"
-requires-python = ">=3.11"
+requires-python = ">=3.10"
 readme = "README.md"
 license = {file = "LICENSE"}
 dependencies = [
@@ -28,6 +28,8 @@ dependencies = [
     "tqdm",
     "typeguard==2.13.3",
     "zstandard",
+    "click", # Added click as a dependency
+    "requests", # Added requests as a dependency
 ]
 
 [project.optional-dependencies]
@@ -52,4 +54,7 @@ build = "cp3*-manylinux_x86_64"
 manylinux-x86_64-image = "manylinux_2_28"
 
 [project.scripts]
+alphafold3 = "alphafold3.cli.main_cli:alphafold3"
+alphafold3-fetch-databases = "alphafold3.cli.fetch_databases:main"
+alphafold3-test = "alphafold3.cli.run_alphafold_test:main"
 build_data = "alphafold3.build_data:build_data"
